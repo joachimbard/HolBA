@@ -234,7 +234,9 @@ structure bir_arm8_cache_speculation_model : OBS_MODEL =
 fun get_obs_model id =
   let
     val obs_hol_type =
-	      if id = "mem_address_pc_trace" then
+        if id = "pc_trace" then
+          bir_pc_model.obs_hol_type
+	      else if id = "mem_address_pc_trace" then
 	        bir_arm8_mem_addr_pc_model.obs_hol_type
         else if id = "cache_tag_index" then
           bir_arm8_cache_line_model.obs_hol_type
@@ -252,7 +254,9 @@ fun get_obs_model id =
             raise ERR "get_obs_model" ("unknown obs_model selected: " ^ id);
 
     val add_obs =
-	      if id = "mem_address_pc_trace" then
+        if id = "pc_trace" then
+          bir_pc_model.add_obs
+	      else if id = "mem_address_pc_trace" then
 	        bir_arm8_mem_addr_pc_model.add_obs
         else if id = "cache_tag_index" then
           bir_arm8_cache_line_model.add_obs
