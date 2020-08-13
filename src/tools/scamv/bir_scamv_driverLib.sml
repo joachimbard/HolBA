@@ -628,7 +628,9 @@ fun scamv_run { max_iter = m, prog_size = sz, max_tests = tests, enumerate = enu
 
         val _ =
            case hw_obs_model of
-                hw_cache_tag_index  =>
+              hw_time =>
+                      hw_obs_model_id := "time"
+              | hw_cache_tag_index  =>
                       hw_obs_model_id := "cache_multiw"
               | hw_cache_index_numvalid =>
                       hw_obs_model_id := "cache_multiw_numinset"

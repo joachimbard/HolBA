@@ -22,7 +22,8 @@ datatype obs_model = pc_trace
                    | cache_tag_index_part_page
                    | cache_speculation
 
-datatype hw_obs_model = hw_cache_tag_index
+datatype hw_obs_model = hw_time
+                      | hw_cache_tag_index
                       | hw_cache_index_numvalid
                       | hw_cache_tag_index_part
                       | hw_cache_tag_index_part_page
@@ -80,7 +81,8 @@ fun obs_model_fromString om =
 
 fun hw_obs_model_fromString hwom =
     case hwom of
-        "hw_cache_tag_index"           => SOME hw_cache_tag_index
+        "hw_time"                      => SOME hw_time
+      | "hw_cache_tag_index"           => SOME hw_cache_tag_index
       | "hw_cache_index_numvalid"      => SOME hw_cache_index_numvalid
       | "hw_cache_tag_index_part"      => SOME hw_cache_tag_index_part
       | "hw_cache_tag_index_part_page" => SOME hw_cache_tag_index_part_page
@@ -357,8 +359,8 @@ fun print_scamv_opt_usage () =
         print "Scam-V Usage:\n\n";
         List.map print_entry opt_table;
         print ("\ngenerator arg should be one of: rand, prefetch_strides, qc, slice, file\n");
-        print ("\nobs_model arg should be one of: mem_address_pc_trace, pc_trace, cache_tag_index, cache_tag_only, cache_index_only, cache_tag_index_part, cache_tag_index_part_page\n");
-        print ("\nhw_obs_model arg should be one of: hw_cache_tag_index, hw_cache_index_numvalid, hw_cache_tag_index_part, hw_cache_tag_index_part_page\n");
+        print ("\nobs_model arg should be one of: pc_trace, mem_address_pc_trace, cache_tag_index, cache_tag_only, cache_index_only, cache_tag_index_part, cache_tag_index_part_page\n");
+        print ("\nhw_obs_model arg should be one of: hw_time, hw_cache_tag_index, hw_cache_index_numvalid, hw_cache_tag_index_part, hw_cache_tag_index_part_page\n");
         print ("\nDefaults are: " ^ PolyML.makestring default_cfg ^ "\n")
     end
 
