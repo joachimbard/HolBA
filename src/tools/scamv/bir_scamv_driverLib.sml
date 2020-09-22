@@ -614,19 +614,21 @@ fun scamv_run { max_iter = m, prog_size = sz, max_tests = tests, enumerate = enu
               | _ => raise ERR "scamv_run" ("unknown arch_type " ^ PolyML.makestring arch_type);
 
         val prog_store_fun =
-           case gen of
-                gen_rand => (case generator_param of
-                                 SOME x => prog_gen_store_rand x sz
-                               | NONE   => prog_gen_store_rand "" sz)
-              | qc => (case generator_param of
-                                 SOME x => prog_gen_store_a_la_qc x sz
-                               | NONE   => raise ERR "scamv_run::qc" "qc type needs to be specified as generator_param")
-              | slice => prog_gen_store_rand_slice sz
-              | from_file => (case generator_param of
-                                 SOME x => prog_gen_store_fromfile x
-                               | NONE   => raise ERR "scamv_run::from_file" "file needs to be specified as generator_param")
-              | prefetch_strides => prog_gen_store_prefetch_stride sz
-              | _ => raise ERR "scamv_run" ("unknown generator type " ^ PolyML.makestring gen)
+          let val at = !arch_type_id in
+            case gen of
+                 gen_rand => (case generator_param of
+                                  SOME x => prog_gen_store_rand x at sz
+                                | NONE   => prog_gen_store_rand "" at sz)
+               | qc => (case generator_param of
+                                  SOME x => prog_gen_store_a_la_qc x sz
+                                | NONE   => raise ERR "scamv_run::qc" "qc type needs to be specified as generator_param")
+               | slice => prog_gen_store_rand_slice sz
+               | from_file => (case generator_param of
+                                  SOME x => prog_gen_store_fromfile x
+                                | NONE   => raise ERR "scamv_run::from_file" "file needs to be specified as generator_param")
+               | prefetch_strides => prog_gen_store_prefetch_stride sz
+               | _ => raise ERR "scamv_run" ("unknown generator type " ^ PolyML.makestring gen)
+          end
 
         val _ =
             current_obs_model_id := match_obs_model obs_model;
