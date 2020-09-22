@@ -141,7 +141,7 @@ fun prog_gen_store_fromfile filename   = prog_gen_store "prog_gen_fromfile"  fal
 fun prog_gen_store_fromlines asmlines  = prog_gen_store "prog_gen_fromlines" false "arm8" (fn x => x)                    asmlines;
 
 (* TODO: use correct prog_gen_fun in case of M0 *)
-fun prog_gen_store_rand param arch_type_id sz       = prog_gen_store ("prog_gen_rand::"^param)    true  arch_type_id (bir_prog_gen_arm8_rand param) sz;
+fun prog_gen_store_rand param sz       = prog_gen_store ("prog_gen_rand::"^param)    true  "arm8" (bir_prog_gen_arm8_rand param) sz;
 
 fun pgen_qc_param param =
   case param of

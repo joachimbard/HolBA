@@ -13,7 +13,7 @@ signature bir_prog_genLib = sig
   val prog_gen_store_fromfile        : string      -> unit -> string * term
   val prog_gen_store_fromlines       : string list -> unit -> string * term
 
-  val prog_gen_store_rand            : string -> string -> int -> unit -> string * term
+  val prog_gen_store_rand            : string -> int -> unit -> string * term
   val prog_gen_store_a_la_qc         : string -> int -> unit -> string * term
 
   val prog_gen_store_rand_slice      : int         -> unit -> string * term
