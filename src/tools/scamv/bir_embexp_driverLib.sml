@@ -438,9 +438,10 @@ end
 
   fun bir_embexp_run exp_id with_reset =
     let
+      (* TODO remove board_type param; this is handled by run_experiment.py (check it!) *)
       val cmdline = ("\"" ^ (logfile_basedir()) ^ "/scripts/run_experiment.py\" " ^
                      (if with_reset then "--conn_mode reset " else "--conn_mode try ") ^
-                     exp_id);
+                     "--board_type lpc11c24" ^  exp_id);
       val _ = print ("===>>> RUNNING EXPERIMENT: " ^ exp_id ^ "\n")
       val lines = get_exec_output_list cmdline;
       val lastline = List.nth(lines, (List.length lines) - 1);

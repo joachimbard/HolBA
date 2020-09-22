@@ -1,6 +1,9 @@
 signature scamv_configLib =
 sig
     type scamv_config
+    datatype arch_type = arm8
+                       | m0
+
     datatype gen_type = gen_rand
                       | prefetch_strides
                       | qc

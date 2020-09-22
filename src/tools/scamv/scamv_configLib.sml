@@ -7,6 +7,9 @@ datatype 'cfg opt_entry =
          Arity0 of string * string * string * ('cfg -> bool -> 'cfg)
          | Arity1 of string * string * string * ('cfg -> string -> 'cfg)
 
+datatype arch_type = arm8
+                   | m0
+
 datatype gen_type = gen_rand
                   | prefetch_strides
                   | qc
@@ -32,6 +35,7 @@ type scamv_config = { max_iter  : int,
                       prog_size : int,
                       max_tests : int,
                       enumerate : bool,
+                      arch_type : arch_type,
                       generator : gen_type,
                       generator_param : string option,
                       obs_model : obs_model,
@@ -47,6 +51,7 @@ val default_cfg = { max_iter  = 10
                   , prog_size = 5
                   , max_tests = 4
                   , enumerate = false
+                  , arch_type = arm8
                   , generator = gen_rand
                   , generator_param = NONE
                   , obs_model = cache_tag_index
@@ -57,6 +62,12 @@ val default_cfg = { max_iter  = 10
                   , verbosity = 1
                   , seed_rand = true
                   }
+
+fun arch_type_fromString at =
+    case at of
+        "arm8" => SOME arm8
+      | "m0"   => SOME m0
+      | _      => NONE
 
 fun gen_type_fromString gt =
     case gt of
@@ -95,6 +106,7 @@ fun set_max_iter (cfg : scamv_config) n =
       prog_size = # prog_size cfg,
       max_tests = # max_tests cfg,
       enumerate = # enumerate cfg,
+      arch_type = # arch_type cfg,
       generator = # generator cfg,
       generator_param = # generator_param cfg,
       obs_model = # obs_model cfg,
@@ -110,6 +122,7 @@ fun set_prog_size (cfg : scamv_config) n =
       prog_size = n,
       max_tests = # max_tests cfg,
       enumerate = # enumerate cfg,
+      arch_type = # arch_type cfg,
       generator = # generator cfg,
       generator_param = # generator_param cfg,
       obs_model = # obs_model cfg,
@@ -125,6 +138,7 @@ fun set_max_tests (cfg : scamv_config) n =
       prog_size = # prog_size cfg,
       max_tests = n,
       enumerate = # enumerate cfg,
+      arch_type = # arch_type cfg,
       generator = # generator cfg,
       generator_param = # generator_param cfg,
       obs_model = # obs_model cfg,
@@ -140,6 +154,23 @@ fun set_enumerate (cfg : scamv_config) enum =
       prog_size = # prog_size cfg,
       max_tests = # max_tests cfg,
       enumerate = enum,
+      arch_type = # arch_type cfg,
+      generator = # generator cfg,
+      generator_param = # generator_param cfg,
+      obs_model = # obs_model cfg,
+      refined_obs_model = # refined_obs_model cfg,
+      obs_projection = # obs_projection cfg,
+      hw_obs_model = # hw_obs_model cfg,
+      verbosity = # verbosity cfg,
+      only_gen = # only_gen cfg,
+      seed_rand = # seed_rand cfg };
+
+fun set_arch_type (cfg : scamv_config) at =
+    { max_iter = # max_iter cfg,
+      prog_size = # prog_size cfg,
+      max_tests = # max_tests cfg,
+      enumerate = # enumerate cfg,
+      arch_type = at,
       generator = # generator cfg,
       generator_param = # generator_param cfg,
       obs_model = # obs_model cfg,
@@ -155,6 +186,7 @@ fun set_generator (cfg : scamv_config) gen =
       prog_size = # prog_size cfg,
       max_tests = # max_tests cfg,
       enumerate = # enumerate cfg,
+      arch_type = # arch_type cfg,
       generator = gen,
       generator_param = # generator_param cfg,
       obs_model = # obs_model cfg,
@@ -170,6 +202,7 @@ fun set_generator_param (cfg : scamv_config) gen_param =
       prog_size = # prog_size cfg,
       max_tests = # max_tests cfg,
       enumerate = # enumerate cfg,
+      arch_type = # arch_type cfg,
       generator = # generator cfg,
       generator_param = gen_param,
       obs_model = # obs_model cfg,
@@ -185,6 +218,7 @@ fun set_obs_model (cfg : scamv_config) om =
       prog_size = # prog_size cfg,
       max_tests = # max_tests cfg,
       enumerate = # enumerate cfg,
+      arch_type = # arch_type cfg,
       generator = # generator cfg,
       generator_param = # generator_param cfg,
       obs_model = om,
@@ -200,6 +234,7 @@ fun set_refined_obs_model (cfg : scamv_config) om =
       prog_size = # prog_size cfg,
       max_tests = # max_tests cfg,
       enumerate = # enumerate cfg,
+      arch_type = # arch_type cfg,
       generator = # generator cfg,
       generator_param = # generator_param cfg,
       obs_model = # obs_model cfg,
@@ -216,6 +251,7 @@ fun set_obs_projection (cfg : scamv_config) obs_number =
       prog_size = # prog_size cfg,
       max_tests = # max_tests cfg,
       enumerate = # enumerate cfg,
+      arch_type = # arch_type cfg,
       generator = # generator cfg,
       generator_param = # generator_param cfg,
       obs_model = # obs_model cfg,
@@ -232,6 +268,7 @@ fun set_hw_obs_model (cfg : scamv_config) hwom =
       prog_size = # prog_size cfg,
       max_tests = # max_tests cfg,
       enumerate = # enumerate cfg,
+      arch_type = # arch_type cfg,
       generator = # generator cfg,
       generator_param = # generator_param cfg,
       obs_model = # obs_model cfg,
@@ -247,6 +284,7 @@ fun set_only_gen (cfg : scamv_config) b =
       prog_size = # prog_size cfg,
       max_tests = # max_tests cfg,
       enumerate = # enumerate cfg,
+      arch_type = # arch_type cfg,
       generator = # generator cfg,
       generator_param = # generator_param cfg,
       obs_model = # obs_model cfg,
@@ -262,6 +300,7 @@ fun set_verbosity (cfg : scamv_config) v =
       prog_size = # prog_size cfg,
       max_tests = # max_tests cfg,
       enumerate = # enumerate cfg,
+      arch_type = # arch_type cfg,
       generator = # generator cfg,
       generator_param = # generator_param cfg,
       obs_model = # obs_model cfg,
@@ -277,6 +316,7 @@ fun set_seed_rand (cfg : scamv_config) s =
       prog_size = # prog_size cfg,
       max_tests = # max_tests cfg,
       enumerate = # enumerate cfg,
+      arch_type = # arch_type cfg,
       generator = # generator cfg,
       generator_param = # generator_param cfg,
       obs_model = # obs_model cfg,
@@ -308,6 +348,8 @@ val opt_table =
               handle_conv_arg_with Int.fromString set_max_tests)
     , Arity0 ("enum", "enumerate", "enable enumeration for test case generation",
               fn cfg => fn b => set_enumerate cfg b)
+    , Arity1 ("at", "arch_type", "Architecture",
+              handle_conv_arg_with arch_type_fromString set_arch_type)
     , Arity1 ("gen", "generator", "Program generator",
               handle_conv_arg_with gen_type_fromString set_generator)
     , Arity1 ("genpar", "generator_param", "Program generator parameter",
@@ -358,6 +400,7 @@ fun print_scamv_opt_usage () =
     in
         print "Scam-V Usage:\n\n";
         List.map print_entry opt_table;
+        print ("\narch_type arg should be one of: arm8, m0\n");
         print ("\ngenerator arg should be one of: rand, prefetch_strides, qc, slice, file\n");
         print ("\nobs_model arg should be one of: pc_trace, mem_address_pc_trace, cache_tag_index, cache_tag_only, cache_index_only, cache_tag_index_part, cache_tag_index_part_page\n");
         print ("\nhw_obs_model arg should be one of: hw_time, hw_cache_tag_index, hw_cache_index_numvalid, hw_cache_tag_index_part, hw_cache_tag_index_part_page\n");

@@ -104,7 +104,7 @@ struct
     end
     end;
 
-  fun prog_gen_store prog_gen_id retry_on_liftfail prog_gen_fun args () =
+  fun prog_gen_store prog_gen_id retry_on_liftfail arch_type_id prog_gen_fun args () =
     let
       val (asm_code, lifted_prog, len) = gen_until_liftable retry_on_liftfail prog_gen_fun args;
 
@@ -121,7 +121,7 @@ struct
           (mk_BirProgram o mk_list) (blocks@[new_last_block],ty)
         end;
 
-      val prog_id = bir_embexp_prog_create ("arm8", prog_gen_id) asm_code;
+      val prog_id = bir_embexp_prog_create (arch_type_id, prog_gen_id) asm_code;
     in
       (prog_id, prog_with_halt)
     end;
@@ -136,10 +136,12 @@ struct
 
 (* instances of program generators *)
 (* ========================================================================================= *)
-fun prog_gen_store_fromfile filename   = prog_gen_store "prog_gen_fromfile"          false load_asm_lines                 filename;
-fun prog_gen_store_fromlines asmlines  = prog_gen_store "prog_gen_fromlines"         false (fn x => x)                    asmlines;
+(* TODO: adjust for M0 *)
+fun prog_gen_store_fromfile filename   = prog_gen_store "prog_gen_fromfile"  false "arm8" load_asm_lines                 filename;
+fun prog_gen_store_fromlines asmlines  = prog_gen_store "prog_gen_fromlines" false "arm8" (fn x => x)                    asmlines;
 
-fun prog_gen_store_rand param sz       = prog_gen_store ("prog_gen_rand::"^param)    true  (bir_prog_gen_arm8_rand param) sz;
+(* TODO: use correct prog_gen_fun in case of M0 *)
+fun prog_gen_store_rand param arch_type_id sz       = prog_gen_store ("prog_gen_rand::"^param)    true  arch_type_id (bir_prog_gen_arm8_rand param) sz;
 
 fun pgen_qc_param param =
   case param of
@@ -152,10 +154,10 @@ fun pgen_qc_param param =
    | "spectre"  => prog_gen_a_la_qc_noresize arb_program_spectre
    | _          => raise ERR "prog_gen_store_a_la_qc" "unknown qc generator";
 
-fun prog_gen_store_a_la_qc param sz    = prog_gen_store ("prog_gen_a_la_qc::"^param) true  (pgen_qc_param param)          sz;
-    
-fun prog_gen_store_rand_slice sz       = prog_gen_store "prog_gen_rand_slice"        true  bir_prog_gen_arm8_slice        sz;
-fun prog_gen_store_prefetch_stride sz  = prog_gen_store "prog_gen_prefetch_stride"   true  prog_gen_prefetch_stride       sz;
+(* TODO: adjust for M0 *)
+fun prog_gen_store_a_la_qc param sz    = prog_gen_store ("prog_gen_a_la_qc::"^param) true  "arm8" (pgen_qc_param param)          sz;
+fun prog_gen_store_rand_slice sz       = prog_gen_store "prog_gen_rand_slice"        true  "arm8" bir_prog_gen_arm8_slice        sz;
+fun prog_gen_store_prefetch_stride sz  = prog_gen_store "prog_gen_prefetch_stride"   true  "arm8" prog_gen_prefetch_stride       sz;
 
 (*
 val filename = "examples/asm/branch.s";
