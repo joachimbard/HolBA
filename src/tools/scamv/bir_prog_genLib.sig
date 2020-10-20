@@ -3,7 +3,7 @@ signature bir_prog_genLib = sig
   (* ---------------------- *)
   (* general functions      *)
   (* ---------------------- *)
-  val process_asm_code : string -> bir_inst_lifting_mem_region list
+  val process_asm_code : string -> string -> bir_inst_lifting_mem_region list
   val lift_program_from_sections : bir_inst_lifting_mem_region list -> term
 
   (* ---------------------- *)

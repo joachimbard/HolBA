@@ -12,6 +12,7 @@ struct
   open wordsSyntax;
 
   open bir_prog_gen_randLib;
+(*  open bir_prog_gen_m0_randLib; *)
   open bir_prog_gen_sliceLib;
   open asm_genLib;
   open armv8_prefetch_genLib;
@@ -59,9 +60,9 @@ struct
         lifted_prog_typed
     end
 
-  fun process_asm_code asm_code =
+  fun process_asm_code compiler asm_code =
       let
-	val da_file = bir_gcc_assembe_disassemble asm_code
+	val da_file = bir_gcc_assemble_disassemble compiler asm_code
 
 	val (region_map, sections) = read_disassembly_file_regions da_file;
       in
@@ -75,18 +76,18 @@ struct
                 print "=================================\n";
                 print "---------------------------------\n");
 
-  fun gen_until_liftable retry_on_liftfail prog_gen_fun args =
+  fun gen_until_liftable retry_on_liftfail compiler prog_gen_fun args =
     let
       val prog = prog_gen_fun args;
       val prog_len = length prog;
       val asm_code = bir_embexp_prog_to_code prog;
       val _ = print_asm_code asm_code;
-      val compile_opt = SOME (process_asm_code asm_code)
+      val compile_opt = SOME (process_asm_code compiler asm_code)
 	     handle HOL_ERR x => if retry_on_liftfail then (print ("not liftable:\n" ^ PolyML.makestring x); NONE) else
                                    raise HOL_ERR x;
     in
       case compile_opt of
-	  NONE => gen_until_liftable retry_on_liftfail prog_gen_fun args
+	  NONE => gen_until_liftable retry_on_liftfail compiler prog_gen_fun args
 	| SOME sections => 
     let
       (*
@@ -99,14 +100,15 @@ struct
       val lift_worked = List.all lbl_exists (List.tabulate (prog_len, fn x => x));
     in
       if lift_worked then (asm_code, lifted_prog, prog_len) else
-      if retry_on_liftfail then (gen_until_liftable retry_on_liftfail prog_gen_fun args) else
+      if retry_on_liftfail then (gen_until_liftable retry_on_liftfail compiler prog_gen_fun args) else
       raise ERR "gen_until_liftable" "lifting failed"
     end
     end;
 
   fun prog_gen_store prog_gen_id retry_on_liftfail arch_type_id prog_gen_fun args () =
     let
-      val (asm_code, lifted_prog, len) = gen_until_liftable retry_on_liftfail prog_gen_fun args;
+      val compiler = case arch_type_id of "m0" => "HOLBA_GCC_ARM_CROSS" | _ => "HOLBA_GCC_ARM8_CROSS"
+      val (asm_code, lifted_prog, len) = gen_until_liftable retry_on_liftfail compiler prog_gen_fun args;
 
 
       val prog_with_halt =
@@ -141,7 +143,13 @@ fun prog_gen_store_fromfile filename   = prog_gen_store "prog_gen_fromfile"  fal
 fun prog_gen_store_fromlines asmlines  = prog_gen_store "prog_gen_fromlines" false "arm8" (fn x => x)                    asmlines;
 
 (* TODO: use correct prog_gen_fun in case of M0 *)
-fun prog_gen_store_rand param arch_type_id sz       = prog_gen_store ("prog_gen_rand::"^param)    true  arch_type_id (bir_prog_gen_arm8_rand param) sz;
+fun prog_gen_store_rand param arch_type_id sz =
+  let val prog_gen_fun =
+    case arch_type_id of
+      "m0" => (fn _ => fn _ => ["cmp r2, r3", (* "beq end", *) "mov r4, #42" (*, "end:" *)])
+     | _   => bir_prog_gen_arm8_rand
+  in prog_gen_store ("prog_gen_rand::"^param) true arch_type_id (prog_gen_fun param) sz
+  end;
 
 fun pgen_qc_param param =
   case param of
