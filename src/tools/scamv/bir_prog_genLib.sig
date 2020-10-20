@@ -4,7 +4,7 @@ signature bir_prog_genLib = sig
   (* general functions      *)
   (* ---------------------- *)
   val process_asm_code : string -> string -> bir_inst_lifting_mem_region list
-  val lift_program_from_sections : bir_inst_lifting_mem_region list -> term
+  val lift_program_from_sections : ((Arbnum.num * Arbnum.num) -> bir_inst_lifting_mem_region list -> (thm * (bir_inst_error list))) -> bir_inst_lifting_mem_region list -> term
 
   (* ---------------------- *)
   (* program slingers       *)

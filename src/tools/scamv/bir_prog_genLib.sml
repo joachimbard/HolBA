@@ -23,7 +23,8 @@ struct
 (* ========================================================================================= *)
 
   (* for arm8 *)
-  val (bmil_bir_lift_prog_gen, disassemble_fun) = (bmil_arm8.bir_lift_prog_gen, arm8AssemblerLib.arm8_disassemble);
+  val disassemble_fun = arm8AssemblerLib.arm8_disassemble;
+
 
   (* this was copied -----> *)
   fun disassembly_section_to_minmax section =
@@ -48,7 +49,7 @@ struct
   fun da_sections_minmax sections = minmax_fromlist (List.map disassembly_section_to_minmax sections);
   (* <---- this was copied *)
 
-  fun lift_program_from_sections sections =
+  fun lift_program_from_sections bmil_bir_lift_prog_gen sections =
     let
         val prog_range = da_sections_minmax sections;
         val (thm_prog, errors) = bmil_bir_lift_prog_gen prog_range sections;
@@ -76,39 +77,49 @@ struct
                 print "=================================\n";
                 print "---------------------------------\n");
 
-  fun gen_until_liftable retry_on_liftfail compiler prog_gen_fun args =
+  fun gen_until_liftable retry_on_liftfail arch_type_id prog_gen_fun args =
     let
       val prog = prog_gen_fun args;
       val prog_len = length prog;
       val asm_code = bir_embexp_prog_to_code prog;
       val _ = print_asm_code asm_code;
+      val compiler =
+        case arch_type_id of
+          "m0" => "HOLBA_GCC_ARM_CROSS"
+         | _ => "HOLBA_GCC_ARM8_CROSS";
       val compile_opt = SOME (process_asm_code compiler asm_code)
 	     handle HOL_ERR x => if retry_on_liftfail then (print ("not liftable:\n" ^ PolyML.makestring x); NONE) else
                                    raise HOL_ERR x;
     in
       case compile_opt of
-	  NONE => gen_until_liftable retry_on_liftfail compiler prog_gen_fun args
-	| SOME sections => 
+	  NONE => gen_until_liftable retry_on_liftfail arch_type_id prog_gen_fun args
+	| SOME sections =>
     let
       (*
       val SOME sections = compile_opt;
       *)
-      val lifted_prog = lift_program_from_sections sections;
+      val bmil_bir_lift_prog_gen =
+        case arch_type_id of
+          (* TODO: What is the correct function for M0? *)
+          "m0" => bmil_m0_LittleEnd_Main.bir_lift_prog_gen
+         | _ => bmil_arm8.bir_lift_prog_gen;
+      val lifted_prog = lift_program_from_sections bmil_bir_lift_prog_gen sections;
       val blocks = (fst o dest_list o dest_BirProgram) lifted_prog;
       val labels = List.map (fn t => (snd o dest_eq o concl o EVAL) ``(^t).bb_label``) blocks;
       fun lbl_exists idx = List.exists (fn x => x = ``BL_Address (Imm64 ^(mk_wordi (Arbnum.fromInt (idx*4), 64)))``) labels;
       val lift_worked = List.all lbl_exists (List.tabulate (prog_len, fn x => x));
     in
       if lift_worked then (asm_code, lifted_prog, prog_len) else
-      if retry_on_liftfail then (gen_until_liftable retry_on_liftfail compiler prog_gen_fun args) else
-      raise ERR "gen_until_liftable" "lifting failed"
+      if retry_on_liftfail
+      then (gen_until_liftable retry_on_liftfail arch_type_id prog_gen_fun args)
+      else raise ERR "gen_until_liftable" "lifting failed"
     end
     end;
 
   fun prog_gen_store prog_gen_id retry_on_liftfail arch_type_id prog_gen_fun args () =
     let
-      val compiler = case arch_type_id of "m0" => "HOLBA_GCC_ARM_CROSS" | _ => "HOLBA_GCC_ARM8_CROSS"
-      val (asm_code, lifted_prog, len) = gen_until_liftable retry_on_liftfail compiler prog_gen_fun args;
+      val (asm_code, lifted_prog, len) =
+        gen_until_liftable retry_on_liftfail arch_type_id prog_gen_fun args;
 
 
       val prog_with_halt =
