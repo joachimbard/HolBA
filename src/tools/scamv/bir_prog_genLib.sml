@@ -6,6 +6,8 @@ struct
   open gcc_supportLib;
   open bir_gccLib;
 
+  open bir_lifter_simple_interfaceLib;
+
   open bir_embexp_driverLib;
 
   open listSyntax;
@@ -23,7 +25,8 @@ struct
 (* ========================================================================================= *)
 
   (* for arm8 *)
-  val disassemble_fun = arm8AssemblerLib.arm8_disassemble;
+  (* val disassemble_fun = arm8AssemblerLib.arm8_disassemble; *)
+  val disassemble_fun = m0AssemblerLib.m0_disassemble;
 
 
   (* this was copied -----> *)
@@ -98,11 +101,10 @@ struct
       (*
       val SOME sections = compile_opt;
       *)
-      val bmil_bir_lift_prog_gen =
-        case arch_type_id of
-          (* TODO: What is the correct function for M0? *)
-          "m0" => bmil_m0_LittleEnd_Main.bir_lift_prog_gen
-         | _ => bmil_arm8.bir_lift_prog_gen;
+      val (bmil_bir_lift_prog_gen, _) = arch_str_to_funs arch_type_id;
+        (* case arch_type_id of
+          "m0" => bmil_m0_LittleEnd_Process.bir_lift_prog_gen
+         | _ => bmil_arm8.bir_lift_prog_gen; *)
       val lifted_prog = lift_program_from_sections bmil_bir_lift_prog_gen sections;
       val blocks = (fst o dest_list o dest_BirProgram) lifted_prog;
       val labels = List.map (fn t => (snd o dest_eq o concl o EVAL) ``(^t).bb_label``) blocks;
