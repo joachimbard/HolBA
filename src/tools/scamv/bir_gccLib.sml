@@ -19,8 +19,13 @@ in
 (*
 val lines = "";
 *)
-  fun bir_gcc_assemble_disassemble env_var input_code =
+  fun bir_gcc_assemble_disassemble arch_str input_code =
     let
+      val (env_var, flags) =
+        case arch_str of
+            "arm8" => ("HOLBA_GCC_ARM8_CROSS", " ")
+          | "m0" => ("HOLBA_GCC_ARM_CROSS", " -mcpu=cortex-m0 -mthumb ")
+          | _ => raise ERR "bir_gcc_assemble_disassemble" ("architecture \"" ^ arch_str ^ "\" unknown");
       val gcc_prefix = gcc_prefix env_var ();
 
       val path_asm_s  = get_simple_tempfile "asm.s";
@@ -29,9 +34,10 @@ val lines = "";
 
       val _ = write_to_file path_asm_s input_code;
 
-      val commandline = (gcc_prefix ^ "gcc -o " ^ path_asm_o ^ " -c " ^ path_asm_s ^
+      val commandline = (gcc_prefix ^ "gcc" ^ flags ^ "-o " ^ path_asm_o ^ " -c " ^ path_asm_s ^
                          " && " ^
                          gcc_prefix ^ "objdump -d " ^ path_asm_o ^ " > " ^ path_asm_da);
+      (* val _ = print("command: " ^ commandline ^ "\n"); *)
       val _ = if OS.Process.isSuccess (OS.Process.system commandline) then ()
               else raise ERR "bir_gcc_assemble_disassemble" "compilation failed somehow";
     in

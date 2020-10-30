@@ -219,7 +219,7 @@ fun to_sml_Arbnums model =
 	    regT(name, dest_word_literal tm)) model;
 
 
-val arch_type_id = ref "";
+val arch_str = ref "";
 val hw_obs_model_id = ref "";
 val do_enum = ref false;
 
@@ -496,7 +496,7 @@ fun next_experiment all_exps next_relation  =
 	val s1::s2::_ = #2 ce_obs_comp
 
         (* create experiment files *)
-        val exp_id  = bir_embexp_sates3_create (!arch_type_id, !hw_obs_model_id, !current_obs_model_id) prog_id (s1, s2, st);
+        val exp_id  = bir_embexp_sates3_create (!arch_str, !hw_obs_model_id, !current_obs_model_id) prog_id (s1, s2, st);
         val exp_gen_message = "Generated experiment: " ^ exp_id;
         val _ = bir_embexp_log_prog exp_gen_message;
 
@@ -609,12 +609,12 @@ fun scamv_run { max_iter = m, prog_size = sz, max_tests = tests, enumerate = enu
         
         val _ =
            case arch_type of
-              arm8 => arch_type_id := "arm8"
-              | m0 => arch_type_id := "m0"
+                arm8 => arch_str := "arm8"
+              | m0 => arch_str := "m0"
               | _ => raise ERR "scamv_run" ("unknown arch_type " ^ PolyML.makestring arch_type);
 
         val prog_store_fun =
-          let val at = !arch_type_id in
+          let val at = !arch_str in
             case gen of
                  gen_rand => (case generator_param of
                                   SOME x => prog_gen_store_rand x at sz
@@ -652,7 +652,7 @@ fun scamv_run { max_iter = m, prog_size = sz, max_tests = tests, enumerate = enu
 
         val config_str =
           "Scam-V set to the following test params:\n" ^
-          ("Architecture         : " ^ !arch_type_id ^ "\n") ^
+          ("Architecture         : " ^ !arch_str ^ "\n") ^
           ("Program generator    : " ^ PolyML.makestring gen ^ "\n") ^
           ("Prog gen params      : " ^ PolyML.makestring generator_param ^ "\n") ^
           ("Observation model    : " ^ !current_obs_model_id ^ "\n") ^
