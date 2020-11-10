@@ -101,7 +101,11 @@ struct
       val lifted_prog = lift_program_from_sections bmil_bir_lift_prog_gen sections;
       val blocks = (fst o dest_list o dest_BirProgram) lifted_prog;
       val labels = List.map (fn t => (snd o dest_eq o concl o EVAL) ``(^t).bb_label``) blocks;
-      fun lbl_exists idx = List.exists (fn x => x = ``BL_Address (Imm64 ^(mk_wordi (Arbnum.fromInt (idx*4), 64)))``) labels;
+      fun lbl_addr idx =
+        case arch_str of
+            "m0" => ``BL_Address (Imm32 ^(mk_wordi (Arbnum.fromInt (idx*2), 32)))``
+          | _ => ``BL_Address (Imm64 ^(mk_wordi (Arbnum.fromInt (idx*4), 64)))``;
+      fun lbl_exists idx = List.exists (fn x => x = lbl_addr idx) labels;
       val lift_worked = List.all lbl_exists (List.tabulate (prog_len, fn x => x));
     in
       if lift_worked then (asm_code, lifted_prog, prog_len) else
@@ -121,7 +125,10 @@ struct
         let
           val (blocks,ty) = dest_list (dest_BirProgram lifted_prog);
           val obs_ty = (hd o snd o dest_type) ty;
-          val lbl = ``BL_Address (Imm64 ^(mk_wordi (Arbnum.fromInt (len*4), 64)))``;
+          val lbl =
+            case arch_str of
+                "m0" => ``BL_Address (Imm32 ^(mk_wordi (Arbnum.fromInt (len*2), 32)))``
+              | _ => ``BL_Address (Imm64 ^(mk_wordi (Arbnum.fromInt (len*4), 64)))``;
           val new_last_block =  bir_programSyntax.mk_bir_block
                     (lbl, mk_list ([], mk_type ("bir_stmt_basic_t", [obs_ty])),
                      ``BStmt_Halt (BExp_Const (Imm32 0x000000w))``);
