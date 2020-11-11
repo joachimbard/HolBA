@@ -2,46 +2,27 @@ open HolKernel Parse
 
 open binariesLib;
 open binariesCfgLib;
+open binariesMemLib;
 
 open bir_symbexec_stateLib;
 open bir_symbexec_coreLib;
 open bir_symbexec_stepLib;
+open bir_symbexec_sumLib;
 open bir_countw_simplificationLib;
 
-val entry_label = "motor_prep_input";
+val entry_labels = ["motor_prep_input",
+                    "__lesf2",
+                    "__clzsi2",
+                    "__aeabi_f2iz",
+                    "pid_msg_write",
+                    "timer_read"];
+val entry_label = List.nth (entry_labels, 0);
 
-(*
-fun print_option pf NONE     = print "NONE"
-  | print_option pf (SOME x) = (print "SOME ("; pf x; print ")");
-*)
-
-(*
-=================================================================================================
-*)
-
-(*
-open binariesCfgVizLib;
-open binariesDefsLib;
-
-val _ = show_call_graph ();
-
-val _ = show_cfg_fun true  bl_dict_ n_dict entry_label;
-val _ = show_cfg_fun true  bl_dict_ n_dict "__aeabi_fmul";
-val _ = show_cfg_fun false bl_dict_ n_dict "__aeabi_fmul";
-val _ = show_cfg_fun false bl_dict_ n_dict "__aeabi_fdiv";
-
-val _ = List.map (print_fun_pathstats false n_dict)
-                 (List.filter (fn x => x <> "__aeabi_fdiv") symbs_sec_text);
-
-val _ = print_dead_code bl_dict_ n_dict entry_label;
-*)
-
-
-(*
-=================================================================================================
-*)
 
 val name   = entry_label;
+
+val _ = print ("\n\nfunname = " ^ (name) ^ "\n\n");
+
 val lbl_tm = (mk_lbl_tm o valOf o mem_find_symbol_addr_) name;
 
 local
@@ -49,7 +30,7 @@ local
 in
   val stop_lbl_tms = (List.map #CFGN_lbl_tm o
                       List.filter (fn n => node_to_rel_symbol n = name andalso
-                                           #CFGN_type n = CFGNT_Return)
+                                           cfg_node_type_eq (#CFGN_type n, CFGNT_Return))
                      ) (List.map snd (Redblackmap.listItems n_dict));
 end
 
@@ -72,31 +53,30 @@ val lbl_tm = ``BL_Address (Imm32 0xb22w)``;
 lookup_block_dict bl_dict_ lbl_tm
 *)
 
-(* TODO: how much space do we actually have? we should "enforce" this with the linker... *)
-val stack_size  = 0x100;
-val stack_start = 0x10000000 + 0x2000 -16;
-val stack_end   = stack_start - stack_size;
 
-val stack_space_req = 0x80;
-
-val pred_conjs = [
-``BExp_BinPred BIExp_Equal
-    (BExp_BinExp BIExp_And
-        (BExp_Den (BVar "SP_process" (BType_Imm Bit32)))
-        (BExp_Const (Imm32 3w)))
-    (BExp_Const (Imm32 0w))``,
-``BExp_BinExp BIExp_And
-          (BExp_BinPred BIExp_LessOrEqual
-             (BExp_Den (BVar "SP_process" (BType_Imm Bit32)))
-             (BExp_Const (Imm32 ^(wordsSyntax.mk_wordii(stack_start, 32)))))
-          (BExp_BinPred BIExp_LessThan
-             (BExp_Const (Imm32 ^(wordsSyntax.mk_wordii(stack_end + stack_space_req, 32))))
-             (BExp_Den (BVar "SP_process" (BType_Imm Bit32))))``
-];
+val use_countw_const_only = false;
+val use_mem_symbolic = true;
 
 val syst = init_state lbl_tm prog_vars;
-val syst = init_state_set_const ``BVar "countw" (BType_Imm Bit64)`` ``(Imm64 0w)`` syst;
-val syst = state_add_preds "init_pred" pred_conjs syst;
+
+val syst =
+  if use_countw_const_only then
+    state_assign_bv bv_countw ``BExp_Const (Imm64 0w)`` syst
+  else
+    state_make_interval bv_countw syst;
+
+local
+  open commonBalrobScriptLib;
+in
+val syst = if not use_mem_symbolic then syst else
+             state_make_mem bv_mem
+                          (Arbnum.fromInt mem_sz_const, Arbnum.fromInt mem_sz_globl, Arbnum.fromInt mem_sz_stack)
+                          (mem_read_byte binary_mem)
+                          bv_sp
+                          syst;
+
+val syst = state_add_preds "init_pred" (pred_conjs (get_fun_usage entry_label)) syst;
+end
 
 val _ = print "initial state created.\n\n";
 (*
@@ -113,7 +93,9 @@ val valsl = (Redblackmap.listItems o SYST_get_vals) syst;
 Redblackmap.peek (SYST_get_vals syst, ``BVar "fr_175_countw" (BType_Imm Bit64)``)
 *)
 
-val systs = symb_exec_to_stop false n_dict bl_dict_ [syst] stop_lbl_tms [];
+val cfb = false;
+
+val systs = symb_exec_to_stop (commonBalrobScriptLib.abpfun cfb) n_dict bl_dict_ [syst] stop_lbl_tms [];
 val _ = print "finished exploration of all paths.\n";
 val _ = print ("number of paths found: " ^ (Int.toString (length systs)));
 val _ = print "\n\n";
@@ -123,12 +105,13 @@ val syst = hd systs
 length(SYST_get_env syst)
 *)
 val (systs_noassertfailed, systs_assertfailed) =
-  List.partition (fn syst => SYST_get_status syst <> BST_AssertionViolated_tm) systs;
+  List.partition (fn syst => not (identical (SYST_get_status syst) BST_AssertionViolated_tm)) systs;
 val _ = print ("number of \"no assert failed\" paths found: " ^ (Int.toString (length systs_noassertfailed)));
 val _ = print "\n\n";
 
 (*
 val syst = hd systs_assertfailed;
+val syst = hd systs_noassertfailed;
 *)
 
 val systs_feasible = List.filter check_feasible systs_noassertfailed;
@@ -138,21 +121,76 @@ val _ = print "\n\n";
 val systs_tidiedup = List.map tidyup_state_vals systs_feasible;
 val _ = print "finished tidying up all paths.\n\n";
 
-val countws = List.map eval_countw_in_syst systs_tidiedup;
-val counts = List.map (wordsSyntax.dest_word_literal o
-                       bir_valuesSyntax.dest_BVal_Imm64 o
-                       optionSyntax.dest_some) countws;
 
-fun find_bound comp l =
-  List.foldr (fn (x,m) => if comp (x, m) then x else m) (hd l) l;
+(*
+val countw_symbvs = List.map (symbv_to_string o get_state_symbv "script" bv_countw) systs_tidiedup;
 
-val count_max = find_bound (Arbnum.>) counts;
-val count_min = find_bound (Arbnum.<) counts;
+val syst1 = List.nth (systs_tidiedup, 1);
+val syst2 = List.nth (systs_tidiedup, 2);
+
+val syst = merge_states_vartointerval bv_countw (syst1, syst2);
+
+val syst = List.nth (systs_tidiedup, 0);
+val syst = List.nth (systs_tidiedup, 1);
+val syst = List.nth (systs_tidiedup, 2);
+val syst = List.nth (systs_tidiedup, 3);
+
+val envl = (Redblackmap.listItems o SYST_get_env) syst;
+val valsl = (Redblackmap.listItems o SYST_get_vals) syst;
+*)
+
+(*
+val syst = hd systs_tidiedup;
+val syst = List.nth (systs_feasible, 0);
+
+val bv_fr = ``BVar "fr_10_tmp_SP_process" (BType_Imm Bit32)``;
+val bv_fr = ``(BVar "fr_15_SP_process" (BType_Imm Bit32))``;
+
+val bv_fr = ``(BVar "fr_57_R3" (BType_Imm Bit32))``;
+
+val bv_fr = ``BVar "fr_82_PSR_Z" BType_Bool``;
+val bv_fr = ``BVar "fr_75_R3" (BType_Imm Bit32)``;
+val bv_fr = ``BVar "fr_43_R2" (BType_Imm Bit32)``;
+
+val bv_fr = ``BVar "fr_353_MEM" (BType_Mem Bit32 Bit8)``;
+
+find_bv_val "script" (SYST_get_vals syst) bv_fr;
+(Redblackset.listItems o deps_of_symbval "script") (find_bv_val "script" (SYST_get_vals syst) bv_fr);
+
+expand_bv_fr_in_syst bv_fr syst
+*)
+
+val _ = print ("num preds: " ^ ((Int.toString o length o SYST_get_pred o List.nth) (systs_tidiedup, 0)) ^ "\n");
+
+val syst_merged =
+  (fn x => List.foldr (merge_states_vartointerval bv_countw bv_mem bv_sp)
+                      (hd x)
+                      (tl x)
+  ) systs_tidiedup;
+
+(* print sp and mem *)
+val syst_merged_sp_symbv  = get_state_symbv "script" bv_sp syst_merged;
+val _ = print ("\nSP  = " ^ (symbv_to_string_raw true syst_merged_sp_symbv) ^ "\n\n");
+val syst_merged_mem_symbv = get_state_symbv "script" bv_mem syst_merged;
+val _ = print ("\nMEM = " ^ (symbv_to_string_raw true syst_merged_mem_symbv) ^ "\n\n");
+
+val syst_summary = (lbl_tm, "path predicate goes here", [syst_merged]);
+
+val syst_merged_countw = get_state_symbv "script" bv_countw syst_merged;
+
+(*
+val _ = print (symbv_to_string syst_merged_countw);
+*)
+
+val (count_min, count_max) =
+  case syst_merged_countw of
+     SymbValInterval ((min, max), _) =>
+        (term_to_string min, term_to_string max)
+   | _ => raise ERR "balrob-test" "should be an interval";
 
 val _ = print "\n\n\n";
-val _ = print ("funname = " ^ (name) ^ "\n");
-val _ = print ("max = " ^ (Arbnum.toString count_max) ^ "\n");
-val _ = print ("min = " ^ (Arbnum.toString count_min) ^ "\n");
+val _ = print ("min = " ^ count_min ^ "\n");
+val _ = print ("max = " ^ count_max ^ "\n");
 
 
 (*
@@ -166,3 +204,132 @@ check_feasible (syst)
     (* - derive constants from the state predicate (update both places to not loose information) *)
     (* - constant propagation in expressions *)
 
+
+
+
+
+
+(*
+val envl = (Redblackmap.listItems o SYST_get_env) func_syst;
+val valsl = (Redblackmap.listItems o SYST_get_vals) func_syst;
+*)
+
+
+val (func_lbl_tm, func_precond, func_systs) = syst_summary;
+
+val entry_label = "motor_set_l";
+(*
+"c1c" call
+"c20" return
+*)
+
+val name   = entry_label;
+
+val _ = print ("\n\nfunname = " ^ (name) ^ "\n\n");
+
+val lbl_tm = (mk_lbl_tm o valOf o mem_find_symbol_addr_) name;
+
+val stop_lbl_tms = [func_lbl_tm]; (*``BL_Address (Imm32 0xc1cw)``];*)
+
+val syst = init_state lbl_tm prog_vars;
+val syst = state_make_interval bv_countw syst;
+local
+  open commonBalrobScriptLib;
+in
+val syst = state_make_mem bv_mem
+                          (Arbnum.fromInt mem_sz_const, Arbnum.fromInt mem_sz_globl, Arbnum.fromInt mem_sz_stack)
+                          (mem_read_byte binary_mem)
+                          bv_sp
+                          syst;
+
+val syst = state_add_preds "init_pred" (pred_conjs (get_fun_usage entry_label)) syst;
+end
+
+val _ = print "initial state created.\n\n";
+
+val cfb = false;
+
+val systs = symb_exec_to_stop (commonBalrobScriptLib.abpfun cfb) n_dict bl_dict_ [syst] stop_lbl_tms [];
+val _ = print "finished exploration of all paths.\n";
+val _ = print ("number of paths found: " ^ (Int.toString (length systs)));
+val _ = print "\n\n";
+
+val (systs_noassertfailed, systs_assertfailed) =
+  List.partition (fn syst => not (identical (SYST_get_status syst) BST_AssertionViolated_tm)) systs;
+val _ = print ("number of \"no assert failed\" paths found: " ^ (Int.toString (length systs_noassertfailed)));
+val _ = print "\n\n";
+
+
+
+(* now instanciation ... *)
+val syst = if length systs_noassertfailed = 1 then hd systs_noassertfailed else
+           raise ERR "script" "more than one symbolic state in current path/state";
+
+val systs_inst = instantiate_summaries [syst_summary] [syst];
+
+(*
+val syst_inst = hd systs_inst;
+val envl = (Redblackmap.listItems o SYST_get_env) syst_inst;
+val valsl = (Redblackmap.listItems o SYST_get_vals) syst_inst;
+*)
+
+(* ... and continuation up to the return of the function *)
+val _ = print "\n========================\n";
+val _ = print "continue after instantiation...\n\n";
+
+(*
+open bir_block_collectionLib;
+val lbl_tm = SYST_get_pc syst_inst;
+lookup_block_dict bl_dict_ lbl_tm
+ *)
+
+val stop_lbl_tms = [``BL_Address (Imm32 0xc74w)``];
+
+val systs = symb_exec_to_stop (commonBalrobScriptLib.abpfun cfb) n_dict bl_dict_ systs_inst stop_lbl_tms [];
+
+val (systs_noassertfailed, systs_assertfailed) =
+  List.partition (fn syst => not (identical (SYST_get_status syst) BST_AssertionViolated_tm)) systs;
+val _ = print ("number of \"no assert failed\" paths found: " ^ (Int.toString (length systs_noassertfailed)));
+val _ = print "\n\n";
+
+(*
+val syst = hd systs_assertfailed;
+val syst = hd systs_noassertfailed;
+*)
+
+val systs_feasible = List.filter check_feasible systs_noassertfailed;
+val _ = print ("number of feasible paths found: " ^ (Int.toString (length systs_feasible)));
+val _ = print "\n\n";
+
+val systs_tidiedup = List.map tidyup_state_vals systs_feasible;
+val _ = print "finished tidying up all paths.\n\n";
+
+val syst_merged =
+  (fn x => List.foldr (merge_states_vartointerval bv_countw bv_mem bv_sp)
+                      (hd x)
+                      (tl x)
+  ) systs_tidiedup;
+
+(* print sp and mem *)
+val syst_merged_sp_symbv  = get_state_symbv "script" bv_sp syst_merged;
+val _ = print ("\nSP  = " ^ (symbv_to_string_raw true syst_merged_sp_symbv) ^ "\n\n");
+val syst_merged_mem_symbv = get_state_symbv "script" bv_mem syst_merged;
+val _ = print ("\nMEM = " ^ (symbv_to_string_raw true syst_merged_mem_symbv) ^ "\n\n");
+
+val syst_summary = (lbl_tm, "path predicate goes here", [syst_merged]);
+
+val syst_merged_countw = get_state_symbv "script" bv_countw syst_merged;
+
+(*
+val _ = print (symbv_to_string syst_merged_countw);
+*)
+
+val (count_min, count_max) =
+  case syst_merged_countw of
+     SymbValInterval ((min, max), _) =>
+        (term_to_string min, term_to_string max)
+   | _ => raise ERR "balrob-test" "should be an interval";
+
+val _ = print "\n\n\n";
+val _ = print ("min = " ^ count_min ^ "\n");
+val _ = print ("max = " ^ count_max ^ "\n");

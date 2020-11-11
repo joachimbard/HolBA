@@ -2,20 +2,59 @@ structure bir_symbexec_stateLib =
 struct
 
 local
-val ERR = Feedback.mk_HOL_ERR "bir_symbexec_stateLib"
-val wrap_exn = Feedback.wrap_exn "bir_symbexec_stateLib"
-in
+  val ERR      = Feedback.mk_HOL_ERR "bir_symbexec_stateLib"
+  val wrap_exn = Feedback.wrap_exn   "bir_symbexec_stateLib"
+in (* outermost local *)
 
 (* symbolic values *)
 datatype symb_value =
-    SymbValBE    of (term * term Redblackset.set)
-  | SymbValRange of (term * term)
+    SymbValBE       of (term * term Redblackset.set)
+  | SymbValInterval of ((term * term) * term Redblackset.set)
                     (* TODO: generalize this later *)
                     (* memory layout: flash, globals, stack;
-                                      start and size of middle portion (globals) *)
-  | SymbValMem   of (((Arbnum.num -> Arbnum.num) * term * term) * (Arbnum.num * Arbnum.num));
+                                      size of first (constants) and middle portion (globals) *)
+  | SymbValMem      of (term *
+                        (Arbnum.num * Arbnum.num * Arbnum.num) *
+                        ((Arbnum.num -> Arbnum.num option) *
+                         (Arbnum.num, term * term Redblackset.set) Redblackmap.dict *
+                         (* notes: need to keep information what on the stack is unknown after merging!
+                                   use free variables for this *)
+                         (term * (Arbnum.num, term * term Redblackset.set) Redblackmap.dict)
+                        ) *
+                        term Redblackset.set);
 
 val symbvalbe_dep_empty = Redblackset.empty Term.compare;
+
+val symbvdebugOn = false;
+fun memmap_string_fold ((addr, (exp, deps)), str) =
+  "[" ^ (Arbnum.toString addr) ^ " -> " ^ (term_to_string exp) ^ "]\n" ^ str;
+fun symbv_to_string_raw verb (SymbValBE (exp, deps)) =
+       ("SymbValBE (" ^
+        (term_to_string exp) ^
+        ", " ^
+        (Int.toString (Redblackset.numItems deps)) ^
+        ")")
+  | symbv_to_string_raw verb (SymbValInterval ((min, max), deps)) =
+       ("SymbValInterval ((" ^
+        (term_to_string min) ^
+        ", " ^
+        (term_to_string max) ^
+        "), " ^
+        (Int.toString (Redblackset.numItems deps)) ^
+        ")")
+  | symbv_to_string_raw verb (SymbValMem (basem_bv, _, (_, mapglobl, (sp, mapstack)), deps)) =
+       "SymbValMem (" ^ (if not verb then "" else
+           "\nbasem= " ^ (term_to_string basem_bv) ^
+           "\nglobl=" ^
+           (List.foldr memmap_string_fold "" (Redblackmap.listItems mapglobl)) ^
+           "\t,\nsp=" ^
+           (term_to_string sp) ^
+           "\t,\nstack=\n" ^
+           (List.foldr memmap_string_fold "" (Redblackmap.listItems mapstack)) ^
+           "\t,\ndeps=\n" ^
+           (Int.toString (Redblackset.numItems deps))
+       ) ^ "\t)";
+fun symbv_to_string symbv = symbv_to_string_raw symbvdebugOn symbv;
 
 
 (* symbolic states *)
@@ -104,6 +143,9 @@ fun SYST_update_vals vals' (SymbState systr) =
           (vals');
 
 
+fun state_is_running syst =
+  identical (SYST_get_status syst) BST_Running_tm;
+
 (* fresh variables and initial state variables *)
 local
   open bir_envSyntax;
@@ -135,6 +177,35 @@ in
     in
       String.isPrefix "sy_" s
     end;
+
+  fun is_bvar_free vals bv =
+    (not o isSome o Redblackmap.peek) (vals,bv);
+
+  fun is_bvar_initorfree vals bv =
+    (is_bvar_init) bv orelse
+    (is_bvar_free vals) bv;
+
+  fun is_bvar_bound vals bv =
+    not (is_bvar_initorfree vals bv);
+
+  fun get_symbv_bexp_free_sz varstr ty_sz =
+    let
+      open bslSyntax;
+      open bir_envSyntax;
+      open bir_valuesSyntax;
+
+      val ty = case ty_sz of
+                   1 => BType_Imm1_tm
+                |  8 => BType_Imm8_tm
+                | 16 => BType_Imm16_tm
+                | 32 => BType_Imm32_tm
+                | _  => raise ERR "get_symbv_bexp_free_sz" ("cannot handle size " ^ (Int.toString ty_sz));
+
+      val bv_fr = get_bvar_fresh (mk_BVar_string (varstr, ty));
+      val deps = Redblackset.add (symbvalbe_dep_empty, bv_fr);
+    in
+      (bden (bv_fr), deps)
+    end;
 end
 
 
@@ -157,69 +228,78 @@ end
 
 
 (* state update primitives *)
-(* TODO: better names *)
-fun insert_bvfrexp bv_fresh symbv syst =
+fun insert_symbval bv_fresh symbv syst =
   let
     val vals  = SYST_get_vals syst;
+
+    (* make sure that bv_fresh is indeed fresh and is not an initial variable *)
+    val _ = if (not o is_bvar_init) bv_fresh then () else
+            raise ERR "insert_symbval" ("variable cannot be an initial variable: " ^ (term_to_string bv_fresh));
+    val _ = if (not o isSome o Redblackmap.peek) (vals, bv_fresh) then () else
+            raise ERR "insert_symbval" ("variable needs to be fresh: " ^ (term_to_string bv_fresh));
+
     val vals' = Redblackmap.insert (vals, bv_fresh, symbv);
   in
     (SYST_update_vals vals') syst
   end;
 
-fun update_env bv bv_fresh syst =
+fun update_envvar bv bv_fresh syst =
   let
     val env   = SYST_get_env  syst;
 
-    val _     = if (isSome o Redblackmap.peek) (env, bv) then () else
-                raise ERR
-                   "update_env"
-                   ("can only update existing state variables, tried to update: " ^ (term_to_string bv));
+    val _ = if (isSome o Redblackmap.peek) (env, bv) then () else
+            raise ERR
+                  "update_envvar"
+                  ("can only update existing state variables, tried to update: " ^ (term_to_string bv));
     val env'  = Redblackmap.insert (env, bv, bv_fresh);
   in
     (SYST_update_env env') syst
   end;
 
-
-(* state updates *)
-(* TODO: generalize this a bit more - to general state updates - move this to core lib
-          ??? including state update primitives ??? *)
-fun init_state_set_const bv bimm syst =
-  let
-    val bv_fresh = get_bvar_fresh bv;
-    val symbv_init = SymbValBE (``BExp_Const ^bimm``, symbvalbe_dep_empty);
-  in
-    (update_env bv bv_fresh o
-     insert_bvfrexp bv_fresh symbv_init
-    ) syst
-  end;
-
-
 (* helper functions *)
-fun find_val vals bv err_src_string =
+fun find_bv_val err_src_string vals bv =
       (valOf o Redblackmap.peek) (vals,bv)
       handle Option => raise ERR
                              err_src_string
                              ("coudln't find value for " ^ (term_to_string bv));
 
+fun get_state_symbv err_src_string bv syst =
+  let
+    val env  = (SYST_get_env  syst);
+    val vals = (SYST_get_vals syst);
+
+    val bv_fr = find_bv_val (err_src_string ^ "::get_state_symbv::env")
+                            env  bv;
+    val symbv = find_bv_val (err_src_string ^ "get_state_symbv::vals")
+                            vals bv_fr;
+  in
+    symbv
+  end;
+
 
 (* symbval dependencies *)
-fun deps_of_symbval symbv err_src_string =
+fun deps_of_symbval err_src_string symbv =
   case symbv of
           SymbValBE (_,deps) => deps
+        | SymbValInterval (_, deps) => deps
+        | SymbValMem (_, _, _, deps) => deps
+(*
         | _ => raise ERR err_src_string "cannot handle symbolic value type to find dependencies";
+*)
 
-fun union_deps vals (bv, deps) =
+fun deps_union vals (bv, deps) =
   let
-    val symbv = find_val vals bv "union_deps";
-    val deps_delta = deps_of_symbval symbv "union_deps";
+    val symbv = find_bv_val "deps_union" vals bv;
+    val deps_delta = deps_of_symbval "deps_union" symbv;
   in
     Redblackset.union (deps_delta, deps)
   end;
 
-fun find_symbval_deps err_src_string vals bv =
-  if is_bvar_init bv then Redblackset.add(symbvalbe_dep_empty,bv) else (
-    deps_of_symbval (find_val vals bv err_src_string) err_src_string
-    handle e => raise wrap_exn ("find_symbval_deps::expect bir expression for variable: " ^ (term_to_string bv)) e
+fun deps_find_symbval err_src_string vals bv =
+  if is_bvar_initorfree vals bv
+  then Redblackset.add(symbvalbe_dep_empty,bv) else (
+    deps_of_symbval err_src_string (find_bv_val err_src_string vals bv)
+    handle e => raise wrap_exn ("deps_find_symbval::expect bir expression for variable: " ^ (term_to_string bv)) e
   );
 
 
@@ -233,11 +313,11 @@ fun tidyup_state_vals syst =
     val entry_vars = symbvalbe_dep_empty;
     val entry_vars = Redblackset.addList(entry_vars, pred);
     val entry_vars = Redblackset.addList(entry_vars, (List.map snd o Redblackmap.listItems) env);
-    val entry_vars = Redblackset.filter (not o is_bvar_init) entry_vars;
+    val entry_vars = Redblackset.filter (is_bvar_bound vals) entry_vars;
 
-    val deps = Redblackset.foldl (union_deps vals) symbvalbe_dep_empty entry_vars;
+    val deps = Redblackset.foldl (deps_union vals) symbvalbe_dep_empty entry_vars;
 
-    val keep_vals = Redblackset.filter (not o is_bvar_init) (Redblackset.union(entry_vars, deps));
+    val keep_vals = Redblackset.filter (is_bvar_bound vals) (Redblackset.union(entry_vars, deps));
 
     val num_vals = Redblackmap.numItems vals;
     val num_keep_vals = Redblackset.numItems keep_vals;
@@ -248,10 +328,11 @@ fun tidyup_state_vals syst =
             if num_diff < 0 then
               raise ERR "tidyup_state_vals" "this shouldn't be negative"
             else
+              if true then () else
               print ("TIDIED UP " ^ (Int.toString num_diff) ^ " VALUES.\n");
 
     val vals' = Redblackset.foldl
-                (fn (bv,vals_) => Redblackmap.insert(vals_, bv, find_val vals bv "tidyup_state_vals"))
+                (fn (bv,vals_) => Redblackmap.insert(vals_, bv, find_bv_val "tidyup_state_vals" vals bv))
                 (Redblackmap.mkDict Term.compare)
                 keep_vals;
   in
@@ -265,27 +346,51 @@ local
   open bir_envSyntax;
   open bir_smtLib;
 
-  val BIExp_Equal_tm = ``BIExp_Equal``;
-
   fun proc_preds (vars, asserts) pred =
     List.foldr (fn (exp, (vl1,al)) =>
       let val (_,vl2,a) = bexp_to_smtlib [] vl1 exp in
         (vl2, a::al)
       end) (vars, asserts) pred;
 
+  open bslSyntax;
+
   fun symbval_eq_to_bexp (bv, symbv) =
+    let
+      val bv_exp = bden bv;
+
+      val bexp =
        case symbv of
           SymbValBE (exp,_) =>
-            mk_BExp_BinPred (BIExp_Equal_tm, mk_BExp_Den bv, exp)
+            beq (bv_exp, exp)
+        | SymbValInterval ((exp1, exp2), _) =>
+            band (ble (exp1, bv_exp), ble (bv_exp, exp2))
         | _ => raise ERR "symbval_eq_to_bexp" "cannot handle symbolic value type";
+      (*
+      val _ = print (term_to_string bv);
+      val _ = print "\n";
+      *)
+    in
+      bexp
+    end;
 
   fun collect_pred_expsdeps vals (bv, (exps, deps)) =
     let
-      val symbv = find_val vals bv "collect_pred_expsdeps";
-      val (exp, deps_delta) =
+      val symbv = find_bv_val "collect_pred_expsdeps" vals bv;
+      val _ = if true then () else
+              print ("pred: " ^ (symbv_to_string symbv) ^ "\n");
+
+      val deps_delta = deps_of_symbval "collect_pred_expsdeps" symbv;
+      val _ = if true then () else
+              print ("pred_deps: " ^ (List.foldr (fn (x,s) => s ^ "; " ^ (term_to_string x)) "" (Redblackset.listItems deps_delta)) ^ "\n");
+
+      val exp =
        case symbv of
-          SymbValBE x => x
+          SymbValBE (x, _) => x
         | _ => raise ERR "collect_pred_expsdeps" "cannot handle symbolic value type";
+      (*
+      val _ = print (term_to_string exp);
+      val _ = print "\n";
+      *)
     in
       (exp::exps, Redblackset.union(deps_delta, deps))
     end;
@@ -300,9 +405,9 @@ in (* local *)
         List.foldr (collect_pred_expsdeps vals) ([], symbvalbe_dep_empty) pred_bvl;
 
       val pred_depsl_ = Redblackset.listItems pred_deps;
-      val pred_depsl = List.filter (not o is_bvar_init) pred_depsl_;
+      val pred_depsl  = List.filter (is_bvar_bound vals) pred_depsl_;
 
-      val valsl = List.map (fn bv => (bv, find_val vals bv "check_feasible"))
+      val valsl = List.map (fn bv => (bv, find_bv_val "check_feasible" vals bv))
                            pred_depsl;
       val vals_eql =
         List.map symbval_eq_to_bexp valsl;
@@ -328,6 +433,7 @@ in (* local *)
       val resultvalue = result <> BirSmtUnsat;
 
       val _ = if resultvalue then () else
+              if true then () else
               print "FOUND AN INFEASIBLE PATH...\n";
     in
       resultvalue
