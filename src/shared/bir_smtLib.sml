@@ -138,18 +138,12 @@ local
   open bir_valuesSyntax;
   open wordsSyntax;
 
+  open bir_fileLib;
+
   val ERR = Feedback.mk_HOL_ERR "bir_smtLib";
 
   fun problem_gen fname t msg = 
     raise ERR fname (msg ^ (term_to_string t));
-
-  fun read_from_file filename =
-    let
-      val file = TextIO.openIn filename;
-      val s    = TextIO.inputAll file before TextIO.closeIn file;
-    in
-      s
-    end;
 
 in
 
@@ -170,9 +164,9 @@ in
           (SMTTY_BV 32)
         else if is_BType_Imm64 btype then
           (SMTTY_BV 64)
-        else if is_BType_Mem btype andalso dest_BType_Mem btype = (Bit32_tm, Bit8_tm) then
+        else if is_BType_Mem btype andalso pair_eq identical identical (dest_BType_Mem btype) (Bit32_tm, Bit8_tm) then
           (SMTTY_MEM (32, 8))
-        else if is_BType_Mem btype andalso dest_BType_Mem btype = (Bit64_tm, Bit8_tm) then
+        else if is_BType_Mem btype andalso pair_eq identical identical (dest_BType_Mem btype) (Bit64_tm, Bit8_tm) then
           (SMTTY_MEM (64, 8))
         else problem_gen "bvar_to_smtlib_type" btype "don't know how to convert BIR type: "
     end;
@@ -549,8 +543,22 @@ BExp_Store (BExp_Den (BVar "fr_269_MEM" (BType_Mem Bit32 Bit8)))
           (conds3, vars3, storeval)
         end
 
+      else if bir_bool_expSyntax.is_bir_exp_false exp then
+        (conds, vars, ("false", SMTTY_Bool))
+      else if bir_bool_expSyntax.is_bir_exp_true  exp then
+        (conds, vars, ("true",  SMTTY_Bool))
+
       else
-        problem exp "don't know BIR expression: "
+        (* TODO: this is a generic solution for BIR syntactic sugar but we actually
+                 want to export some specific expressions in a direct way, if possible *)
+        let
+          val eqexp = (snd o dest_eq o concl o EVAL) exp;
+        in
+          if not (identical exp eqexp) then
+            bexp_to_smtlib conds vars eqexp
+          else
+            problem exp "don't know BIR expression: "
+        end
     end;
 
 end (* local *)

@@ -13,7 +13,7 @@ fun print_and_check_thm name thm t_concl =
     val _ = print (name ^ ":\n");
     val _ = print "===============================\n";
     val _ = (Hol_pp.print_thm thm; print "\n");
-    val _ = if concl thm = t_concl then () else
+    val _ = if identical (concl thm) t_concl then () else
             raise ERR "print_and_check_thm" "conclusion is not as expected"
     val _ = print "\n\n";
   in
@@ -75,10 +75,12 @@ val _ = print_and_check_thm
   "Example \"BIR optimized mutual recursion\" - is_even"
   bir_ieo_is_even_ht
   ``
-  bir_triple
+  bir_map_triple
     bprog_is_even_odd
+    bir_exp_true
     (BL_Address (Imm32 (0w :word32)))
     {BL_Address (Imm32 (516w :word32)); BL_Address (Imm32 (512w :word32))}
+    {}
     (bir_ieo_pre (v1 :word64)) (bir_ieo_sec_iseven_exit_post v1)
   ``;
 
@@ -86,9 +88,11 @@ val _ = print_and_check_thm
   "Example \"BIR optimized mutual recursion\" - is_odd"
   bir_ieo_is_odd_ht
   ``
-  bir_triple
+  bir_map_triple
     bprog_is_even_odd
+    bir_exp_true
     (BL_Address (Imm32 (256w :word32)))
     {BL_Address (Imm32 (516w :word32)); BL_Address (Imm32 (512w :word32))}
+    {}
     (bir_ieo_pre (v1 :word64)) (bir_ieo_sec_isodd_exit_post v1)
   ``;
