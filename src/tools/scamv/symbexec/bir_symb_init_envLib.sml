@@ -69,29 +69,36 @@ fun genf_mem_a_n a n name =
   end;
 
 
+  (* TODO: handle different archs *)
 fun init_env bir_program = 
     let
+      val arch_str = "m0";
       fun bvar_tovarname t = (fromHOLstring o snd o dest_eq o concl o EVAL) ``bir_var_name ^t``;
       fun regs n = List.tabulate (n, fn x => "R" ^ (Int.toString x));
       fun gen_genf_list genf nl =
         List.map (fn n => (n, genf)) nl;
       fun gen_temp sl = List.map (fn s => "tmp_" ^ s) sl;
 
-      (* 64 Bit Registers *)
-      val regs_64 = ["SP_EL0"]@(regs 31);
-      val regs_64 = regs_64@(gen_temp regs_64);
+      (* 32/64 Bit Registers *)
+      val normal_regs = ["SP_EL0"]@(regs 31);
+      val normal_regs = normal_regs@(gen_temp normal_regs);
 
       (* 1 Bit flags *)
-      val regs_1 = ["ProcState_N", "ProcState_Z", "ProcState_C", "ProcState_V"];
+      val regs_1 =
+        case arch_str of
+            "m0" => ["PSR_N", "PSR_Z", "PSR_C", "PSR_V"]
+          | _ => ["ProcState_N", "ProcState_Z", "ProcState_C", "ProcState_V"];
       val regs_1 = regs_1@(gen_temp regs_1);
 
-      (* 64->8 bit memory *)
-      val mems_64_8 = ["MEM"];
+      (* 32/64 -> 8 bit memory *)
+      val mem = ["MEM"];
+
+      val bit_width = case arch_str of "m0" => 32 | _ => 64;
 
       (* collect all variables *)
-      val bir_vars = (gen_genf_list (genf_reg_n 64) regs_64)@
+      val bir_vars = (gen_genf_list (genf_reg_n bit_width) normal_regs)@
                      (gen_genf_list (genf_reg_n 1) regs_1)@
-                     (gen_genf_list (genf_mem_a_n 64 8) mems_64_8);
+                     (gen_genf_list (genf_mem_a_n bit_width 8) mem);
 
       val vars_in_prog = List.map bvar_tovarname (gen_vars_of_prog bir_program);
       val bir_vars = List.filter (fn (x, _) => List.exists (fn y => x = y) vars_in_prog) bir_vars;
@@ -109,7 +116,7 @@ fun init_env bir_program =
               print "\n";
               raise ERR "init_env" "the symbolic environment doesn't contain all variables of the program"); *)
     in
-      List.foldl update_env env (gen_genf_list (genf_reg_n 64) missing_vars)
+      List.foldl update_env env (gen_genf_list (genf_reg_n bit_width) missing_vars)
     end;
 
 end (* local *)
