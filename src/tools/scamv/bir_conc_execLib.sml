@@ -178,11 +178,11 @@ struct
 	  (memSubs,(mk_mem_state []))
       end
 
-  fun conc_exec_program depth prog envfo (mls,v) =
+  fun conc_exec_program arch_str depth prog envfo (mls,v) =
       let 
 	  val holba_ss = ((std_ss++HolBACoreSimps.holBACore_ss))
 	  val precond  = ``BExp_Const (Imm1 1w)``
-	  val states   = symb_exec_process_to_leafs_pdecide (fn x => true) envfo depth precond prog
+	  val states   = symb_exec_process_to_leafs_pdecide (fn x => true) envfo arch_str depth precond prog
 
 	  (* filter for the concrete path *)
 	  fun eq_true t = t = ``SOME (BVal_Imm (Imm1 1w))``
@@ -272,23 +272,23 @@ struct
 
 
 
-  fun conc_exec_obs_compute prog s =
+  fun conc_exec_obs_compute arch_str prog s =
     let
       val is_state_mem_emp = (fn s => (#1 (List.partition (is_memT) s)) |> hd |> (#2 o getMem) |> List.null);
       val _ =  mem_state := []
-      
+
       val (m, rg) = List.partition (is_memT) s
       val m'  = if List.null m then ("MEM",[]:((num * num) list)) else (getMem (hd m))
       val rg' = map getReg rg
       val envfo = SOME (gen_symb_updates rg')
       val elm = (filter (fn (a,b) => a = (Arbnum.fromInt 4294967295)) (#2 m'));
-      val (m, v) = if   not(List.null elm) 
+      val (m, v) = if   not(List.null elm)
 		   then (
 		          getMem (hd m) |> (fn x => ((#1 x), []:((num * num) list))),
 		          numSyntax.term_of_int(Arbnum.toInt((#2 o hd) elm))
 		        )
 		   else (m', ``(0:num)``);
-      val state_ = conc_exec_program 200 prog envfo ((#2 m),``^v``)
+      val state_ = conc_exec_program arch_str 200 prog envfo ((#2 m),``^v``)
       val obs = conc_exec_obs_extract state_ ((#2 m),``^v``)
 
       val new_state = if (is_state_mem_emp ((!mem_state) @ rg)) then s else (!mem_state) @ rg
@@ -299,10 +299,10 @@ struct
       (obs, new_state)
     end;
 
-  fun conc_exec_obs_compare prog (s1, s2) =
+  fun conc_exec_obs_compare arch_str prog (s1, s2) =
       let
-	  val (obs1, state1) = conc_exec_obs_compute prog s1 
-	  val (obs2, state2) = conc_exec_obs_compute prog s2
+	  val (obs1, state1) = conc_exec_obs_compute arch_str prog s1
+	  val (obs2, state2) = conc_exec_obs_compute arch_str prog s2
       in
 	  (obs1 = obs2, [state1, state2])
       end;

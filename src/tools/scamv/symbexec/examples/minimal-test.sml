@@ -186,5 +186,5 @@ val prog4 = ``BirProgram
        (BLE_Label (BL_Address (Imm64 8w)))|>]``;
 
 
-fun leafs_of p = symb_exec_process_to_leafs_nosmt maxdepth precond p;
+fun leafs_of p = symb_exec_process_to_leafs_nosmt "arm8" maxdepth precond p;
 

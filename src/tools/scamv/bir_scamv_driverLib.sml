@@ -46,12 +46,12 @@ val DISTINCT_MEM = false;
  - driver decision (jump to a, b or c)
  *)
 
-fun symb_exec_phase prog =
+fun symb_exec_phase arch_str prog =
     let
         (* leaf list *)
         val maxdepth = 5 * length (fst (dest_list (dest_BirProgram prog))) (* (~1); *)
         val precond = ``bir_exp_true``
-        val leafs = symb_exec_process_to_leafs_nosmt maxdepth precond prog;
+        val leafs = symb_exec_process_to_leafs_nosmt arch_str maxdepth precond prog;
 
         (* retrieval of path condition and observation expressions *)
 	fun extract_cond_obs s =
@@ -318,8 +318,8 @@ fun start_interactive prog =
         val _ = current_prog_w_obs := SOME lifted_prog_w_obs;
         val _ = min_verb 3 (fn () => print_term lifted_prog_w_obs);
 
-        val (paths, all_exps) = symb_exec_phase lifted_prog_w_obs;
-	      val _ = List.map (Option.map (List.map (fn (a,b,c) => print_term b)) o snd) paths; 
+        val (paths, all_exps) = symb_exec_phase (!arch_str) lifted_prog_w_obs;
+	      val _ = List.map (Option.map (List.map (fn (a,b,c) => print_term b)) o snd) paths;
 
         fun has_observations (SOME []) = false
           | has_observations NONE = false
@@ -490,7 +490,7 @@ fun next_experiment all_exps next_relation  =
 				  | NONE => raise ERR "next_test" "no program found";
 
 	(* remove meory for now from states*)
-	val ce_obs_comp = conc_exec_obs_compare lifted_prog_w_obs (s1, s2)
+	val ce_obs_comp = conc_exec_obs_compare (!arch_str) lifted_prog_w_obs (s1, s2)
         val _ = if #1 ce_obs_comp then () else
                   raise ERR "next_experiment" "Experiment does not yield equal observations, won't generate an experiment.";
 	val s1::s2::_ = #2 ce_obs_comp

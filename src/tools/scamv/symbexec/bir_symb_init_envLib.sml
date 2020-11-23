@@ -69,10 +69,8 @@ fun genf_mem_a_n a n name =
   end;
 
 
-  (* TODO: handle different archs *)
-fun init_env bir_program = 
+fun init_env arch_str bir_program =
     let
-      val arch_str = "m0";
       fun bvar_tovarname t = (fromHOLstring o snd o dest_eq o concl o EVAL) ``bir_var_name ^t``;
       fun regs n = List.tabulate (n, fn x => "R" ^ (Int.toString x));
       fun gen_genf_list genf nl =

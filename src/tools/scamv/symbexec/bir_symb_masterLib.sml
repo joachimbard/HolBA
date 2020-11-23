@@ -43,14 +43,14 @@ fun pdecide btm =
   end;
 
 
-fun symb_exec_process_to_leafs_pdecide pdecide fo maxdepth precond prog =
-  symb_exec_leaflist (symb_exec_program maxdepth precond prog pdecide fo);
+fun symb_exec_process_to_leafs_pdecide pdecide fo arch_str maxdepth precond prog =
+  symb_exec_leaflist (symb_exec_program arch_str maxdepth precond prog pdecide fo);
 
-val symb_exec_process_to_leafs_nosmt =
-  symb_exec_process_to_leafs_pdecide (fn _ => true) NONE;
+fun symb_exec_process_to_leafs_nosmt arch_str =
+  symb_exec_process_to_leafs_pdecide (fn _ => true) NONE arch_str;
 
-val symb_exec_process_to_leafs =
-  symb_exec_process_to_leafs_pdecide pdecide NONE;
+fun symb_exec_process_to_leafs arch_str =
+  symb_exec_process_to_leafs_pdecide pdecide NONE arch_str;
 
 (*
 val st = hd leafs;
