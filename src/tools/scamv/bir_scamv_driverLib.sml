@@ -28,7 +28,8 @@ fun ifdef__else__ x c c' e = (if x then c else c') |> e;
 fun ifdef__ x c e = case x of true => c |> e;
 fun force f = f ();
 
-val SPECTRE = true;
+(* TODO: allow Spectre *)
+val SPECTRE = false;
 val DISTINCT_MEM = false;
 
 (*
@@ -52,6 +53,8 @@ fun symb_exec_phase arch_str prog =
         val maxdepth = 5 * length (fst (dest_list (dest_BirProgram prog))) (* (~1); *)
         val precond = ``bir_exp_true``
         val leafs = symb_exec_process_to_leafs_nosmt arch_str maxdepth precond prog;
+        (* TODO remove *)
+      val _ = List.map (print_term) leafs
 
         (* retrieval of path condition and observation expressions *)
 	fun extract_cond_obs s =
@@ -152,9 +155,11 @@ fun make_word_relation relation exps =
         val pairs = zip unprimed primed;
 	val (mpair, rpair) = List.partition (fn el =>  (String.isSubstring (#1 el) "MEM")) pairs
 
+        (* TODO: support word64 *)
+        val reg_type = ``:word32``;
         fun mk_distinct_reg (a,b) =
-            let val va = mk_var (a,``:word64``);
-                val vb = mk_var (b,``:word64``);
+            let val va = mk_var (a, reg_type);
+                val vb = mk_var (b, reg_type);
 		val in_range = (fn x => ``(0x80100000w <= ^x /\ ^x < 0x8013FE80w)``);
             in
 		ifdef__else__ SPECTRE
@@ -167,8 +172,10 @@ fun make_word_relation relation exps =
 	fun mk_distinct_mem (a, b) rel = 
 	    let 
 		open finite_mapSyntax
-		val va = mk_var (a, ``:word64 |-> word8``)
-		val vb = mk_var (b, ``:word64 |-> word8``)
+    (* TODO: support word64 *)
+    val mem_type = ``:word32 |-> word8``;
+		val va = mk_var (a, mem_type)
+		val vb = mk_var (b, mem_type)
 		fun split_mem  tms m = filter (fn tm => (#1 (dest_fapply(find_term is_fapply tm)) = m)) tms
 		fun extract_mem_load n rel = ((nub o find_terms (can (dest_mem_load n))) rel);
 		val memop  = (extract_mem_load 7 rel)@(extract_mem_load 3 rel)@(extract_mem_load 1 rel)@(extract_mem_load 0 rel)
@@ -354,7 +361,8 @@ fun mem_constraint [] = ``T``
 	fun mk_cnst vname vls =
 	    let
 		val toIntls = (snd o finite_mapSyntax.strip_fupdate) vls
-		val mem = mk_var (adjust_prime vname ,Type`:word64 |-> word8`)
+    (* TODO: support word64 *)
+		val mem = mk_var (adjust_prime vname ,Type`:word32 |-> word8`)
 		val memconstraint = map (fn p => let val (t1,t2) = pairSyntax.dest_pair p
 						 in
 						     ``^mem ' (^t1) = ^t2``
@@ -434,7 +442,8 @@ fun next_experiment all_exps next_relation  =
                             if String.isSuffix "_" s
                             then String.map (fn c => if c = #"_" then #"'" else c) s
                             else s;
-                        val va = mk_var (adjust_prime a,``:word64``);
+                        (* TODO: support word64 *)
+                        val va = mk_var (adjust_prime a,``:word32``);
                     in ``^va = ^b``
                     end;
             in list_mk_conj (map mk_eq s) end;

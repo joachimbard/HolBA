@@ -159,10 +159,15 @@ fun prog_gen_store_fromlines asmlines  = prog_gen_store "prog_gen_fromlines" fal
 fun prog_gen_store_rand param arch_str sz =
   let val prog_gen_fun =
     case arch_str of
-        "m0" => (fn _ => fn _ => ["cmp r2, r3", (* "beq end",*) "mov r4, #42" (*, "end:" *)])
-      | _ => (fn _ => fn _ => ["cmp x2, x3", "beq #8", "mov x4, #42"])
+        "m0" => (fn _ => fn _ => [(*"cmp r2, r3", "beq end",*)
+        (*"mov r4, #42",*) "ldr r4, [r5]"(*, "end:", "add r4, #5"*)])
+      | _ => (fn _ => fn _ => [(*"cmp x2, x3", "beq end", "mov x4, #42",*)
+      "ldr x4, [x5]"(*, "end:", "add x4, x4, #5"*)])
      (* | _   => bir_prog_gen_arm8_rand *)
-  in prog_gen_store ("prog_gen_rand::"^param) true arch_str (prog_gen_fun param) sz
+  in prog_gen_store ("prog_gen_rand::"^param) false arch_str (prog_gen_fun param) sz
+  (* TODO *)
+  (* in prog_gen_store ("prog_gen_rand::"^param) true arch_str (prog_gen_fun
+  * param) sz*)
   end;
 
 fun pgen_qc_param param =

@@ -32,16 +32,19 @@ struct
 	  val _ = print "\n"
       in () end;
 
-  fun update_env name value env = 
+  fun update_env arch_str name value env =
       let
         val hname = fromMLstring name
-        val wordval = mk_wordi (value, 64);
+        val bitlength = case arch_str of "m0" => 32 | _ => 64;
+        val wordval = mk_wordi (value, bitlength);
       in
-	  (toTerm o EVAL) ``bir_symb_env_update ^hname (BExp_Const (Imm64 ^wordval)) (BType_Imm Bit64) ^env``
+    case arch_str of
+       "m0" => (toTerm o EVAL) ``bir_symb_env_update ^hname (BExp_Const (Imm32 ^wordval)) (BType_Imm Bit32) ^env``
+      | _ => (toTerm o EVAL) ``bir_symb_env_update ^hname (BExp_Const (Imm64 ^wordval)) (BType_Imm Bit64) ^env``
       end;
 
-  fun gen_symb_updates s env =
-    foldr (fn ((n,v),e) => update_env n v e) (env) s;
+  fun gen_symb_updates arch_str s env =
+    foldr (fn ((n,v),e) => update_env arch_str n v e) (env) s;
 
   (* ---------------------- Simplification conversions ---------------------- *)
 
@@ -73,20 +76,22 @@ struct
   val (bitstring_split_tm,  mk_bitstring_split, dest_bitstring_split, is_bitstring_split)  =
       (syntax_fnss2 ) "bitstring_split";
 
-  fun load_store_simp_unchange_conv tm =
+  fun load_store_simp_unchange_conv arch_str tm =
       let 
 	  open bir_exp_memTheory
 	  open bir_exec_expLib
 
 	  val (_,mmp,a,_) = dest_bir_update_mmap ( find_term is_bir_update_mmap tm);
 	  val (vty,aty,_,_,en,addr) = (dest_bir_load_from_mem) (find_term is_bir_load_from_mem tm)
-	  val thm  = ISPECL[a, en, vty, aty, ``(Imm64 (dummy :word64))``, mmp] bir_store_in_mem_used_addrs_THM
+	  val thm  = case arch_str of
+                   "m0" => ISPECL[a, en, vty, aty, ``(Imm32 (dummy :word32))``, mmp] bir_store_in_mem_used_addrs_THM
+                 | _ => ISPECL[a, en, vty, aty, ``(Imm64 (dummy :word64))``, mmp] bir_store_in_mem_used_addrs_THM
 	  val thm' = SIMP_RULE ((std_ss++HolBACoreSimps.holBACore_ss)) [bir_store_in_mem_def, LET_DEF] thm
       in  
 	  (toTerm o EVAL_CONV) (concl (SIMP_RULE (arith_ss) [] (SPECL[addr] thm')))
       end
 
-  fun load_store_simp_unchange1_conv tm =
+  fun load_store_simp_unchange1_conv arch_str tm =
       let
 	  open bir_exp_memTheory
 	  open bir_exec_expLib
@@ -94,12 +99,12 @@ struct
 	  tm |> SIMP_CONV(std_ss++ScamvSimps.bir_load_store_ss)[bir_eval_load_def, bir_eval_store_def]
 	     |> computeLib.RESTR_EVAL_RULE [``bir_eval_load``, ``bir_eval_store``]
 	     |> (toTerm o SIMP_RULE (std_ss++ScamvSimps.bir_load_store_ss) [])
-	     |> load_store_simp_unchange_conv
+	     |> load_store_simp_unchange_conv arch_str
 	     |> SIMP_CONV (std_ss) [bir_mem_addr_def, bitTheory.MOD_2EXP_def, size_of_bir_immtype_def]
 	     |> (#2 o dest_eq o toTerm)
       end
 
-  fun load_store_simp_unchange2_conv tm =
+  fun load_store_simp_unchange2_conv arch_str tm =
       let 
 	  open bir_exp_memTheory
 	  open bir_exec_expLib
@@ -109,7 +114,7 @@ struct
 	  val tm1 = toTerm (SIMP_CONV (std_ss++ScamvSimps.bir_load_store_ss++bir_endian_ss) 
 		      [bir_eval_load_def, bir_eval_store_def, bir_store_in_mem_def, type_of_bir_imm_def,
   		            bir_number_of_mem_splits_def, size_of_bir_immtype_def, LET_DEF] tm)
-	  val tm2 = load_store_simp_unchange_conv tm1 
+	  val tm2 = load_store_simp_unchange_conv arch_str tm1
 		|> (SIMP_CONV(srw_ss())[bir_mem_addr_def,size_of_bir_immtype_def,b2n_def]) 
 		|> (#2 o dest_eq o toTerm)
 
@@ -197,9 +202,9 @@ struct
 			   val tm = ((toTerm) (SIMP_CONV (std_ss++ScamvSimps.bir_load_store_ss) [] (restr_eval_tm)))  
 			       handle _ => restr_eval_tm
 			   val (f,t) = Lib.first (fn (tac,t) => (Lib.can tac) t)
-			   			 [( load_store_simp_unchange_conv,tm ), 
-						  (load_store_simp_unchange1_conv,tm ), 
-						  (load_store_simp_unchange2_conv, tm)]
+			        [( load_store_simp_unchange_conv arch_str,tm ),
+						  (load_store_simp_unchange1_conv arch_str,tm ),
+						  (load_store_simp_unchange2_conv arch_str, tm)]
 			       handle _ => ((fn t => t), tm)
 			   val res = f t
 		       in
@@ -218,7 +223,7 @@ struct
 	  final_state
       end;
 
-  fun conc_exec_obs_extract symb_state (mls,v) =
+  fun conc_exec_obs_extract arch_str symb_state (mls,v) =
     let
       fun eval_exp t = (toTerm o EVAL) t;
       fun eval_exp_to_val t =
@@ -229,15 +234,19 @@ struct
 	    	    (let
 	    	     val tm = (toTerm (SIMP_CONV (std_ss++ScamvSimps.bir_load_store_ss) [] (toTerm esimp)))
 	    		 handle _ => (toTerm esimp)
-	    	     val res = load_store_simp_unchange_conv tm
+             val res = load_store_simp_unchange_conv arch_str tm
 	    		 handle _ => tm
 	    	 in
 	    	     res
 	    	 end)
 
-          val res_v = if is_some res 
-		      then dest_some res 
-		      else let val ex = rhs res in (``(BVal_Imm (Imm64 ((n2w ^ex):word64)))``) end
+          val res_v = if is_some res
+		        then dest_some res
+		        else let val ex = rhs res
+              in case arch_str of
+                      "m0" => (``BVal_Imm (Imm32 ((n2w ^ex):word32))``)
+                   | _ => (``BVal_Imm (Imm64 ((n2w ^ex):word64))``)
+              end
                   (* raise ERR "conc_exec_obs_extract::eval_exp_to_val" "could not evaluate down to a value"; *)
         in
           res_v
@@ -280,7 +289,7 @@ struct
       val (m, rg) = List.partition (is_memT) s
       val m'  = if List.null m then ("MEM",[]:((num * num) list)) else (getMem (hd m))
       val rg' = map getReg rg
-      val envfo = SOME (gen_symb_updates rg')
+      val envfo = SOME (gen_symb_updates arch_str rg')
       val elm = (filter (fn (a,b) => a = (Arbnum.fromInt 4294967295)) (#2 m'));
       val (m, v) = if   not(List.null elm)
 		   then (
@@ -289,7 +298,7 @@ struct
 		        )
 		   else (m', ``(0:num)``);
       val state_ = conc_exec_program arch_str 200 prog envfo ((#2 m),``^v``)
-      val obs = conc_exec_obs_extract state_ ((#2 m),``^v``)
+      val obs = conc_exec_obs_extract arch_str state_ ((#2 m),``^v``)
 
       val new_state = if (is_state_mem_emp ((!mem_state) @ rg)) then s else (!mem_state) @ rg
 
