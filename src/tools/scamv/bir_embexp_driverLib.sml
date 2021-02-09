@@ -204,7 +204,7 @@ struct
     end;
 
   (* create json state *)
-  fun gen_json_state isSecond s =
+  fun gen_json_state isSecond arch_id s =
     let
       fun getReg tm = case tm of regT x => x
       fun getMem tm = case tm of memT x => x
@@ -219,7 +219,8 @@ struct
                     (String.extract(k, 0, SOME((String.size k) - 1)))
                   else k;
 
-          val regname = "x" ^ (String.extract(k, 1, NONE));
+          val reg_prefix = case arch_id of "m0" => "r" | _ => "x";
+          val regname = reg_prefix ^ (String.extract(k, 1, NONE));
         in
           "\n\t\"" ^ regname ^ "\": " ^ (Arbnumcore.toString v)
         end;
@@ -369,8 +370,8 @@ end
       val exp_basedir = get_experiment_basedir arch_id;
 
       (* write out data *)
-      val input1 = gen_json_state false s1;
-      val input2 = gen_json_state false s2;
+      val input1 = gen_json_state false arch_id s1;
+      val input2 = gen_json_state false arch_id s2;
       val exp_datahash = hashstring (prog_id ^ input1 ^ input2);
       val exp_id = "exps2/" ^ exp_type_id ^ "/" ^ exp_datahash;
       val exp_datapath = exp_basedir ^ "/" ^ exp_id;
@@ -403,9 +404,9 @@ end
       val exp_basedir = get_experiment_basedir arch_id;
 
       (* write out data *)
-      val input1 = gen_json_state false s1;
-      val input2 = gen_json_state false s2;
-      val train  = gen_json_state false st;
+      val input1 = gen_json_state false arch_id s1;
+      val input2 = gen_json_state false arch_id s2;
+      val train  = gen_json_state false arch_id st;
       val exp_datahash = hashstring (prog_id ^ input1 ^ input2);
       val exp_id = "exps2/" ^ exp_type_id ^ "/" ^ exp_datahash;
       val exp_datapath = exp_basedir ^ "/" ^ exp_id;
